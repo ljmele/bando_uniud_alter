@@ -1,0 +1,59 @@
+name: Scraper Albo UNIUD
+
+on:
+  # 1. Esecuzione programmata (Cron Schedule)
+  schedule:
+    # Esegue ogni ora al minuto 15 (es. 08:15, 09:15...)
+    # I server GitHub usano l'orario UTC (-1 o -2 ore rispetto all'Italia)
+    - cron: '*/10 * * * *'
+  
+  # 2. Permette di avviarlo manualmente dal tab "Actions" per testare
+  workflow_dispatch:
+
+jobs:
+  run-scraper:
+    runs-on: ubuntu-latest
+    
+    # Diamo i permessi per poter fare "git push" del file json aggiornato
+    permissions:
+      contents: write
+
+    steps:
+      # A. Scarica il codice del repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # B. Installa Python
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # C. Installa le librerie necessarie
+      - name: Install dependencies
+        run: |
+          pip install requests beautifulsoup4
+
+      # D. Esegue lo script
+      - name: Run scraper script
+        env:
+          # Qui passiamo i segreti salvati nelle impostazioni allo script
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python main.py
+
+      # E. Salva la "memoria" (Commit & Push)
+      # Se storia.json è cambiato, lo salva nel repository.
+      # Se non è cambiato, non fa nulla (grazie a "git diff --quiet").
+      - name: Commit and Push if changed
+        run: |
+          git config user.name "Uniud Bot"
+          git config user.email "actions@github.com"
+          git add storia.json
+          # Controlla se ci sono modifiche prima di fare commit
+          if git diff --staged --quiet; then
+            echo "Nessun cambiamento da salvare."
+          else
+            git commit -m "Aggiornamento storico bandi [skip ci]"
+            git push
+          fi
