@@ -13,7 +13,7 @@ KEYWORDS = ["genetica", "bios-14"]
 
 # Nuova lista: Sigle dei Dipartimenti nel RICHIEDENTE che vuoi monitorare
 # (Se lasci questa lista vuota [], il filtro verrà ignorato)
-DIPARTIMENTI_TARGET = ["DI4A"]
+DIPARTIMENTI_TARGET = ["DARU"]
 
 def invia_telegram(messaggio):
     """Invia il messaggio al tuo bot Telegram."""
@@ -171,4 +171,5 @@ def main():
         print("Nessun nuovo bando.")
 
 if __name__ == "__main__":
+
     main()
