@@ -5,7 +5,7 @@ on:
   schedule:
     # Esegue ogni ora al minuto 15 (es. 08:15, 09:15...)
     # I server GitHub usano l'orario UTC (-1 o -2 ore rispetto all'Italia)
-    - cron: '*/10 * * * *'
+    - cron: '*/5 * * * *'
   
   # 2. Permette di avviarlo manualmente dal tab "Actions" per testare
   workflow_dispatch:
