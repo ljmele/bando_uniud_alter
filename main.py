@@ -49,9 +49,9 @@ def battito_cardiaco():
     # Se metti hour=7, in Italia riceverai il messaggio alle 08:00 o 09:00.
     ORA_TARGET_UTC = 6 
     
-    # Controlliamo se siamo nell'ora giusta E nei primi 15 minuti dell'ora.
+    # Controlliamo se siamo nell'ora giusta E nei primi 30 minuti dell'ora.
     # Siccome il tuo cron gira ogni 10 o 15 minuti, questo accadrà una sola volta al giorno.
-    if ora_adesso.hour == ORA_TARGET_UTC and 0 <= ora_adesso.minute < 15:
+    if ora_adesso.hour == ORA_TARGET_UTC and 0 <= ora_adesso.minute < 30:
         messaggio = (
             f"💓 **HEARTBEAT GIORNALIERO**\n"
             f"Il sistema è attivo e funzionante.\n"
@@ -198,3 +198,4 @@ def main():
 if __name__ == "__main__":
 
     main()
+
