@@ -37,6 +37,28 @@ def invia_telegram(messaggio):
     except Exception as e:
         print(f"Errore invio Telegram: {e}")
 
+def battito_cardiaco():
+    """
+    Invia un messaggio di 'Sono Vivo' una volta al giorno.
+    Sfrutta il fatto che lo script gira spesso.
+    """
+    ora_adesso = datetime.now()
+    
+    # --- CONFIGURAZIONE ORARIO HEARTBEAT ---
+    # GitHub usa l'orario UTC (Londra). L'Italia è UTC+1 (inverno) o UTC+2 (estate).
+    # Se metti hour=7, in Italia riceverai il messaggio alle 08:00 o 09:00.
+    ORA_TARGET_UTC = 6 
+    
+    # Controlliamo se siamo nell'ora giusta E nei primi 15 minuti dell'ora.
+    # Siccome il tuo cron gira ogni 10 o 15 minuti, questo accadrà una sola volta al giorno.
+    if ora_adesso.hour == ORA_TARGET_UTC and 0 <= ora_adesso.minute < 15:
+        messaggio = (
+            f"💓 **HEARTBEAT GIORNALIERO**\n"
+            f"Il sistema è attivo e funzionante.\n"
+            f"Orario server: {ora_adesso.strftime('%H:%M')}"
+        )
+        invia_telegram(messaggio)
+        print("Heartbeat inviato.")
 
 def carica_storia():
     """Carica gli ID dei bandi già visti dal file JSON."""
@@ -104,6 +126,9 @@ def estrai_dati(html):
 def main():
     print(f"--- Esecuzione {datetime.now()} ---")
     
+    # 0. Controllo Battito Cardiaco (Prima di fare qualsiasi cosa)
+    battito_cardiaco()
+
     # 1. Scarica HTML
     try:
         response = requests.get(URL_ALBO, timeout=15)
