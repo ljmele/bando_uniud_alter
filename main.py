@@ -167,8 +167,12 @@ def main():
                     key_interessante = True
                     break
 
-            # 2. Check Dipartimento (solo se è già interessante)
-            if key_interessante:
+            # 2. Check Dipartimento
+            # Se DIPARTIMENTI_TARGET è vuoto, ignoriamo il filtro dipartimento
+            if not DIPARTIMENTI_TARGET:
+                dip_interessante = True
+            else:
+                # Altrimenti verifichiamo se il richiedente contiene uno dei dipartimenti target
                 for dip in DIPARTIMENTI_TARGET:
                     if dip in richiedente_upper:
                         dip_interessante = True
