@@ -3,150 +3,133 @@ from bs4 import BeautifulSoup
 import json
 import os
 from datetime import datetime
+import html  # Importante per pulire i testi
 
 # --- CONFIGURAZIONE ---
 URL_ALBO = "https://www.uniud.it/it/albo-ufficiale"
-FILE_STORIA = "storia.json" # Il file che funge da "memoria"
+FILE_STORIA = "storia.json"
 
-# Parole chiave che ti interessano (tutto minuscolo per facilitare il confronto)
+# Parole chiave (tutto minuscolo)
 KEYWORDS = ["genetica", "bios-14"]
 
-# Nuova lista: Sigle dei Dipartimenti nel RICHIEDENTE che vuoi monitorare
-# (Se lasci questa lista vuota [], il filtro verrà ignorato)
+# Dipartimenti nel RICHIEDENTE (Se vuoto [], ignora il filtro)
 DIPARTIMENTI_TARGET = ["DARU"]
 
 def invia_telegram(messaggio):
-    """Invia il messaggio al tuo bot Telegram."""
-    # Recuperiamo i segreti dall'ambiente (NON SCRIVERLI QUI!)
+    """Invia il messaggio al tuo bot Telegram usando HTML."""
     token = os.getenv("TELEGRAM_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     
     if not token or not chat_id:
-        print("Errore: Token o Chat ID mancanti nelle variabili d'ambiente.")
+        print("Errore: Token o Chat ID mancanti.")
         return
 
     url = f"https://api.telegram.org/bot{token}/sendMessage"
+    
+    # MODIFICA 1: Usiamo HTML invece di Markdown per evitare errori con caratteri come _ o *
     payload = {
         "chat_id": chat_id,
         "text": messaggio,
-        "parse_mode": "Markdown" # Per mettere in grassetto o corsivo
+        "parse_mode": "HTML", 
+        "disable_web_page_preview": True
     }
     
     try:
-        requests.post(url, json=payload)
+        response = requests.post(url, json=payload)
+        response.raise_for_status() # Solleva un'eccezione se Telegram risponde con errore (es. 400)
     except Exception as e:
-        print(f"Errore invio Telegram: {e}")
+        print(f"ERRORE INVIO TELEGRAM: {e}")
+        # Se possibile, stampiamo la risposta di Telegram per capire il perché
+        try: print(response.text)
+        except: pass
 
 def battito_cardiaco():
-    """
-    Invia un messaggio di 'Sono Vivo' una volta al giorno.
-    Sfrutta il fatto che lo script gira spesso.
-    """
+    """Invia un messaggio di 'Sono Vivo' una volta al giorno."""
     ora_adesso = datetime.now()
-    
-    # --- CONFIGURAZIONE ORARIO HEARTBEAT ---
-    # GitHub usa l'orario UTC (Londra). L'Italia è UTC+1 (inverno) o UTC+2 (estate).
-    # Se metti hour=7, in Italia riceverai il messaggio alle 08:00 o 09:00.
     ORA_TARGET_UTC = 7
     
-    # Controlliamo se siamo nell'ora giusta E nei primi 30 minuti dell'ora.
-    # Siccome il tuo cron gira ogni 10 o 15 minuti, questo accadrà una sola volta al giorno.
     if ora_adesso.hour == ORA_TARGET_UTC and 0 <= ora_adesso.minute < 30:
+        # MODIFICA 2: Sintassi HTML
         messaggio = (
-            f"🔊 **HEARTBEAT GIORNALIERO**\n"
-            f"Il sistema è attivo e funzionante.\n"
-            f"Orario server: {ora_adesso.strftime('%H:%M')}"
+            f"🔊 <b>HEARTBEAT GIORNALIERO</b>\n"
+            f"Il sistema è attivo.\n"
+            f"Orario: {ora_adesso.strftime('%H:%M')}"
         )
         invia_telegram(messaggio)
         print("Heartbeat inviato.")
 
 def carica_storia():
-    """Carica gli ID dei bandi già visti dal file JSON."""
     if not os.path.exists(FILE_STORIA):
         return []
     with open(FILE_STORIA, 'r') as f:
-        try:
-            return json.load(f)
-        except json.JSONDecodeError:
-            return []
+        try: return json.load(f)
+        except json.JSONDecodeError: return []
 
 def salva_storia(nuova_lista_id):
-    """Salva la lista aggiornata degli ID su file JSON."""
     with open(FILE_STORIA, 'w') as f:
         json.dump(nuova_lista_id, f)
 
-def estrai_dati(html):
-    """Analizza l'HTML e restituisce una lista di dizionari (i bandi)."""
-    soup = BeautifulSoup(html, 'html.parser')
-    
-    # 1. Troviamo la tabella specifica usando la classe che abbiamo visto nel tuo file
+def estrai_dati(html_content):
+    soup = BeautifulSoup(html_content, 'html.parser')
     tabella = soup.find("table", class_="table_albo")
     
     if not tabella:
-        print("Errore: Tabella 'table_albo' non trovata.")
+        # Questo è l'errore che hai visto nei log ieri
+        print("Attenzione: Tabella 'table_albo' non trovata nella pagina.")
         return []
 
     bandi_trovati = []
-    
-    # 2. Iteriamo sulle righe del corpo tabella (tbody)
-    # Saltiamo l'header, cerchiamo direttamente dentro tbody -> tr
     tbody = tabella.find("tbody")
     if tbody:
         righe = tbody.find_all("tr")
-        
         for riga in righe:
             colonne = riga.find_all("td")
-            if len(colonne) < 4: continue # Salta righe malformate
+            if len(colonne) < 4: continue 
 
-            # Estrazione dati basata sulla struttura del tuo HTML
-            numero_id = colonne[0].get_text(strip=True) # Colonna "Numero"
-            data_reg = colonne[1].get_text(strip=True)  # Colonna "Data registrazione"
+            numero_id = colonne[0].get_text(strip=True)
+            data_reg = colonne[1].get_text(strip=True)
             
-            # Colonna "Oggetto": contiene il link e il testo
             cella_oggetto = colonne[2]
             link_elem = cella_oggetto.find("a")
-            
             oggetto_testo = link_elem.get_text(strip=True) if link_elem else cella_oggetto.get_text(strip=True)
             link_url = link_elem['href'] if link_elem else ""
 
-            richiedente_testo = colonne[3].get_text(strip=True) # Colonna "Richiedente"
+            richiedente_testo = colonne[3].get_text(strip=True)
 
-            # Creiamo una "struct" (dizionario) per il bando
-            bando = {
+            bandi_trovati.append({
                 "id": numero_id,
                 "data": data_reg,
                 "oggetto": oggetto_testo,
                 "richiedente": richiedente_testo,
                 "link": link_url
-            }
-            bandi_trovati.append(bando)
+            })
             
     return bandi_trovati
 
 def main():
     print(f"--- Esecuzione {datetime.now()} ---")
-    
-    # 0. Controllo Battito Cardiaco (Prima di fare qualsiasi cosa)
     battito_cardiaco()
 
-    # 1. Scarica HTML
     try:
-        response = requests.get(URL_ALBO, timeout=15)
+        response = requests.get(URL_ALBO, timeout=20)
         response.raise_for_status()
         html_content = response.text
     except Exception as e:
-        print(f"Errore connessione: {e}")
+        print(f"Errore connessione al sito Uniud: {e}")
         return
 
-    # 2. Carica la memoria (i vecchi ID)
     ids_vecchi = carica_storia()
     print(f"Bandi in memoria: {len(ids_vecchi)}")
 
-    # 3. Estrae i bandi attuali dalla pagina
     bandi_attuali = estrai_dati(html_content)
     print(f"Bandi trovati online: {len(bandi_attuali)}")
 
-    # 4. Confronto (Logica del "Diff")
+    if not bandi_attuali:
+        print("Nessun bando estratto. Possibile errore di parsing o sito vuoto.")
+        # Se non trovo nulla, NON salvo la storia per sicurezza, 
+        # per evitare di cancellare la memoria se il sito è down.
+        return 
+
     ids_attuali = [b['id'] for b in bandi_attuali]
     nuovi_bandi = []
 
@@ -154,10 +137,9 @@ def main():
         if bando['id'] not in ids_vecchi:
             nuovi_bandi.append(bando)
 
-            # --- IL FILTRO ---
-            # Controlliamo se nell'oggetto c'è una parola che ci piace
+            # --- FILTRI ---
             oggetto_lower = bando['oggetto'].lower()
-            richiedente_upper = bando['richiedente'].upper() # Standardizziamo in maiuscolo
+            richiedente_upper = bando['richiedente'].upper()
             
             key_interessante = False
             dip_interessante = False
@@ -167,39 +149,38 @@ def main():
                     key_interessante = True
                     break
 
-            # 2. Check Dipartimento
-            # Se DIPARTIMENTI_TARGET è vuoto, ignoriamo il filtro dipartimento
             if not DIPARTIMENTI_TARGET:
                 dip_interessante = True
             else:
-                # Altrimenti verifichiamo se il richiedente contiene uno dei dipartimenti target
                 for dip in DIPARTIMENTI_TARGET:
                     if dip in richiedente_upper:
                         dip_interessante = True
                         break
             
-            # Se è interessante, invia notifica
             if key_interessante and dip_interessante:
-                # Aggiungiamo il richiedente nel messaggio Telegram
-                msg = (f"🚨 **NUOVO BANDO RILEVATO!** 🚨\n\n"
-                       f"🏢 **Da:** {bando['richiedente']}\n"
-                       f"📄 **Oggetto:** {bando['oggetto']}\n\n"
-                       f"🔗 [Link al bando]({bando['link']})")
+                # MODIFICA 3: Costruzione messaggio con tag HTML
+                # Usiamo html.escape per evitare che < o > nel testo rompano l'HTML
+                ogg_safe = html.escape(bando['oggetto'])
+                rich_safe = html.escape(bando['richiedente'])
+                
+                msg = (f"🚨 <b>NUOVO BANDO RILEVATO!</b> 🚨\n\n"
+                       f"🏢 <b>Da:</b> {rich_safe}\n"
+                       f"📄 <b>Oggetto:</b> {ogg_safe}\n\n"
+                       f"🔗 <a href='{bando['link']}'>Link al bando</a>")
                 
                 invia_telegram(msg)
                 print(f"Notifica inviata per: {bando['id']}")
             else:
-                print(f"Nuovo bando {bando['id']} ignorato.")
+                print(f"Nuovo bando {bando['id']} ignorato (Filtri non passati).")
 
-    # 5. Aggiornamento Memoria
-    if nuovi_bandi:
-        print(f"Trovati {len(nuovi_bandi)} nuovi elementi. Aggiorno storico.")
-        # Salviamo la nuova lista completa di ID per il prossimo giro
+    # Aggiornamento Memoria
+    # Salviamo solo se abbiamo trovato qualcosa, per evitare di sovrascrivere con liste vuote in caso di errori
+    if len(ids_attuali) > 0:
         salva_storia(ids_attuali)
-    else:
-        print("Nessun nuovo bando.")
+        if nuovi_bandi:
+            print(f"Storico aggiornato con {len(nuovi_bandi)} nuovi arrivi.")
+        else:
+            print("Storico aggiornato (nessuna novità rilevante).")
 
 if __name__ == "__main__":
-
     main()
-
